@@ -1,6 +1,6 @@
 🛡️ **pgTLSCheck.sh** — _Tu escáner experto de seguridad TLS para PostgreSQL_
 
-## 📣 **Descripción profesional de la herramienta**
+## 📣 **Descripción de la herramienta**
 
 **pgTLSCheck.sh** es una herramienta de auditoría avanzada en Bash diseñada para realizar pentesting específico sobre la capa TLS/SSL de servidores PostgreSQL. Perfecta para administradores, auditores de seguridad, equipos DevSecOps y profesionales que buscan reforzar la postura criptográfica de su infraestructura de datos.
 
