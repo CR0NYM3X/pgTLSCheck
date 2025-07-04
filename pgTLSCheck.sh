@@ -18,7 +18,7 @@ TLS_CONNECT_CHECK_ENABLED=0
 BRIEF_FLAG="-brief"
 BINOPENSSL="/usr/bin"
 BINPSQL="/usr/pgsql-16/bin"
-BRIEF_FLAG="-brief"
+BRIEF_FLAG=""
 # 🎨 Colores ANSI
 RED='\e[31m'         # Errores y alertas
 GREEN='\e[32m'       # Éxito y seguridad
@@ -133,7 +133,7 @@ while [[ "$#" -gt 0 ]]; do
             shift
             ;;
         -v|--verbose)
-            if [[ "$2" =~ ^[0-3]$ ]]; then
+            if [[ "$2" =~ ^[0-4]$ ]]; then
                 VERBOSE="$2"
                 shift 2
             else
@@ -143,7 +143,7 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --verbose=*)
             VAL="${1#*=}"
-            if [[ "$VAL" =~ ^[1-3]$ ]]; then
+            if [[ "$VAL" =~ ^[0-4]$ ]]; then
                 VERBOSE="$VAL"
                 shift
             else
@@ -209,6 +209,11 @@ if [[ "$ASK_PASSWORD" == true && "$NO_PASSWORD" == true ]]; then
     exit 1
 fi
 
+if [[ "$DATE_CHECK" == "1" && "$VERBOSE" == "1"  ]]; then
+    echo "❌ Error: No se puede usar el --verbose=1 con --date-check"
+    exit 1
+fi
+
 
 # Test: mostrar argumentos recibidos
 echo -e "\n${CYAN}${BOLD}═════════════════════════════════════════════════════════${RESET}"
@@ -227,9 +232,10 @@ echo -e "${YELLOW}• Archivo de salida:      ${RESET}${BOLD}$OUTFILE${RESET}"
 echo -e "${CYAN}${BOLD}═════════════════════════════════════════════════════════${RESET}\n"
 
 
-if [[ "$VERBOSE" == "2" || "$VERBOSE" == "3" ]]; then
-  BRIEF_FLAG=""
+if [[ "$VERBOSE" == "1"   ]]; then
+  BRIEF_FLAG="-brief"
 fi
+
 
 
 ########### LÓGICA DEL PROGRAMA ############
@@ -290,12 +296,15 @@ if [[ "$TLS_SCAN_ENABLED" == "1" ]]; then
     NEGOTIATED=$(echo "$OUTPUT_TLS_CONNECT" | grep -v 'Cipher is (NONE)' | grep -E 'Ciphersuite:|Cipher is' | head -1 | awk -F':' '{print $NF}' | awk '{print $NF}' | tr -d '\r')
 
     if [[ "$VERBOSE" == "1" || "$VERBOSE" == "2" ]]; then
-      echo -e "\n${YELLOW}${BOLD}🧪 Detalles del escaneo:${RESET}\n"
+      echo -e "\n${YELLOW}${BOLD}🧪 Detalles de la conexin TLS:${RESET}\n"
       echo "$OUTPUT_TLS_CONNECT"
     elif [[ "$VERBOSE" == "3" ]]; then
-      echo -e "\n${YELLOW}${BOLD}🧪 Detalles conexión TLS:${RESET}\n"
-      echo "$OUTPUT_TLS_CONNECT"
-      echo -e "\n${YELLOW}${BOLD}🧪 Detalles certificado TLS:${RESET}\n"
+      echo -e "\n${YELLOW}${BOLD}🧪 Detalles del certificado TLS:${RESET}\n"
+      echo "$OUTPUT_TLS_CONNECT" | openssl x509 -noout -text
+    elif [[ "$VERBOSE" == "4" ]]; then
+      echo -e "\n${YELLOW}${BOLD}🧪 Detalles de la conexión TLS:${RESET}\n"
+      echo "$OUTPUT_TLS_CONNECT"        
+      echo -e "\n${YELLOW}${BOLD}🧪 Detalles del certificado TLS:${RESET}\n"
       echo "$OUTPUT_TLS_CONNECT" | openssl x509 -noout -text
     fi
 
