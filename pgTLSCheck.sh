@@ -137,7 +137,7 @@ while [[ "$#" -gt 0 ]]; do
                 VERBOSE="$2"
                 shift 2
             else
-                echo "❌ Valor inválido para --verbose. Debe ser 0, 1 o 2"
+                echo "❌ Valor inválido para --verbose. Debe ser 0, 1,2 o 4"
                 exit 1
             fi
             ;;
@@ -147,7 +147,7 @@ while [[ "$#" -gt 0 ]]; do
                 VERBOSE="$VAL"
                 shift
             else
-                echo "❌ Valor inválido para --verbose. Debe ser 0, 1 o 2"
+                echo "❌ Valor inválido para --verbose. Debe ser 0, 1,2 o 4"
                 exit 1
             fi
             ;;
@@ -293,20 +293,10 @@ if [[ "$TLS_SCAN_ENABLED" == "1" ]]; then
       -showcerts -$VERSION $BRIEF_FLAG 2>&1"
 
     OUTPUT_TLS_CONNECT=$(eval "$CMD")
+    OUTPUT_DETAILS_CERT=$(echo "$OUTPUT_TLS_CONNECT" | openssl x509 -noout -text 2>&1)
+    OUTPUT_DATES_CERT=$(echo "$OUTPUT_TLS_CONNECT"  | openssl x509 -noout -dates 2>&1)
+    
     NEGOTIATED=$(echo "$OUTPUT_TLS_CONNECT" | grep -v 'Cipher is (NONE)' | grep -E 'Ciphersuite:|Cipher is' | head -1 | awk -F':' '{print $NF}' | awk '{print $NF}' | tr -d '\r')
-
-    if [[ "$VERBOSE" == "1" || "$VERBOSE" == "2" ]]; then
-      echo -e "\n${YELLOW}${BOLD}🧪 Detalles de la conexin TLS:${RESET}\n"
-      echo "$OUTPUT_TLS_CONNECT"
-    elif [[ "$VERBOSE" == "3" ]]; then
-      echo -e "\n${YELLOW}${BOLD}🧪 Detalles del certificado TLS:${RESET}\n"
-      echo "$OUTPUT_TLS_CONNECT" | openssl x509 -noout -text
-    elif [[ "$VERBOSE" == "4" ]]; then
-      echo -e "\n${YELLOW}${BOLD}🧪 Detalles de la conexión TLS:${RESET}\n"
-      echo "$OUTPUT_TLS_CONNECT"        
-      echo -e "\n${YELLOW}${BOLD}🧪 Detalles del certificado TLS:${RESET}\n"
-      echo "$OUTPUT_TLS_CONNECT" | openssl x509 -noout -text
-    fi
 
     if [[ -n "$NEGOTIATED" ]]; then
       if [[ "$VERSION" == "tls1" || "$VERSION" == "tls1_1" ]]; then
@@ -314,22 +304,47 @@ if [[ "$TLS_SCAN_ENABLED" == "1" ]]; then
         echo -e "   ${GREEN}${BOLD}✔ Conexión exitosa${RESET}"
         echo -e "   ${YELLOW}• Cipher negociado: ${BOLD}$NEGOTIATED${RESET}"
         echo -e "   ${RED}• Riesgo alto: TLS obsoleto (${VERSION})${RESET}"
+        if [[ "$VERBOSE" -ne "1" ]]; then 
+          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "subject:" | sed 's/^[ \t]*//' )${RESET}"
+          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "issuer:" | sed 's/^[ \t]*//' )${RESET}"
+          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "DNS:" | sed 's/^[ \t]*//' )${RESET}"
+        fi        
         if [[ "$DATE_CHECK" == "1" ]]; then 
-          check_cert_validity "$(echo "$OUTPUT_TLS_CONNECT"  | openssl x509 -noout -dates)"
+          check_cert_validity "$OUTPUT_DATES_CERT"
         fi
       else
         echo -e "\n${GREEN}${BOLD}✅ Resultado (moderno):${RESET}"
         echo -e "   ${GREEN}${BOLD}✔ Conexión exitosa${RESET}"
         echo -e "   ${GREEN}• Cipher negociado: ${BOLD}$NEGOTIATED${RESET}"
         echo -e "   ${GREEN}• Seguridad avanzada: TLS ${VERSION^^}${RESET}"
+        if [[ "$VERBOSE" -ne "1" ]]; then 
+          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "subject:" | sed 's/^[ \t]*//' )${RESET}"
+          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "issuer:" | sed 's/^[ \t]*//' )${RESET}"
+          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "DNS:" | sed 's/^[ \t]*//' )${RESET}"
+        fi        
         if [[ "$DATE_CHECK" == "1" ]]; then 
-          check_cert_validity "$(echo "$OUTPUT_TLS_CONNECT"  | openssl x509 -noout -dates)"
+          check_cert_validity "$OUTPUT_DATES_CERT"
         fi        
       fi
     else
       echo -e "\n${RED}${BOLD}❌ Resultado:${RESET}"
       echo -e "   ${RED}• No se pudo establecer conexión TLS (${VERSION})${RESET}"
     fi
+
+    if [[ "$VERBOSE" == "1" || "$VERBOSE" == "2" ]]; then
+      echo -e "\n${YELLOW}${BOLD}🧪 Detalles de la conexin TLS:${RESET}\n"
+      echo "$OUTPUT_TLS_CONNECT"
+    elif [[ "$VERBOSE" == "3" ]]; then
+      echo -e "\n${YELLOW}${BOLD}🧪 Detalles del certificado TLS:${RESET}\n"
+      echo "$OUTPUT_DETAILS_CERT"
+    elif [[ "$VERBOSE" == "4" ]]; then
+      echo -e "\n${YELLOW}${BOLD}🧪 Detalles de la conexión TLS:${RESET}\n"
+      echo "$OUTPUT_TLS_CONNECT"        
+      echo -e "\n${YELLOW}${BOLD}🧪 Detalles del certificado TLS:${RESET}\n"
+      echo "$OUTPUT_DETAILS_CERT" 
+    fi
+
+    
   done
 fi
 
