@@ -18,6 +18,13 @@ BRIEF_FLAG="-brief"
 BINOPENSSL="/usr/bin"
 BINPSQL="/usr/pgsql-16/bin"
 BRIEF_FLAG="-brief"
+# 🎨 Colores ANSI
+RED='\e[31m'
+GREEN='\e[32m'
+YELLOW='\e[33m'
+CYAN='\e[36m'
+BOLD='\e[1m'
+RESET='\e[0m'
 
 show_help() {
     echo "pgTLSCheck.sh - Herramienta de escaneo TLS para PostgreSQL"
@@ -32,9 +39,14 @@ show_help() {
 #    echo "  -w, --no-password           No solicitar contraseña (usa .pgpass o conexión con trust - por defecto:true )"
     echo "  -W, --password              Solicitar contraseña (modo interactivo - por defecto:false)"
     echo "  -v, --verbose=VALOR         Nivel de salida:"
-    echo "                                 0 = por defecto solo imprime true o false"
+    echo "                                 0 = por defecto solo imprime si cumple o no"
     echo "                                 1 = breve (solo resumen)"
-    echo "                                 2 = detallado (verbose completo de openssl"
+    echo "                                 2 = detallado (Imprime detalles de conexión TLS )"
+    echo "                                 3 = detallado (Imprime detalles de conexión TLS  y detalles completos del certificado)"
+    echo "  --tls-scan                  Escanea versiones TLS soportadas"
+    echo "  --tls-cipher-audit          Verificar los tipos de ciphers soportadas"
+    echo "  --tls-connect-check         Verifica conexión segura a PostgreSQL"
+    echo "  --cert-date-check           validación de fechas del certificado"    
     echo "  -f, --file=ARCHIVO          Ruta donde se guardara la salida impresa en la terminal"
     echo "  --help                      Muestra esta ayuda"
     echo ""
@@ -116,7 +128,7 @@ while [[ "$#" -gt 0 ]]; do
             shift
             ;;
         -v|--verbose)
-            if [[ "$2" =~ ^[0-2]$ ]]; then
+            if [[ "$2" =~ ^[0-3]$ ]]; then
                 VERBOSE="$2"
                 shift 2
             else
@@ -126,7 +138,7 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --verbose=*)
             VAL="${1#*=}"
-            if [[ "$VAL" =~ ^[1-2]$ ]]; then
+            if [[ "$VAL" =~ ^[1-3]$ ]]; then
                 VERBOSE="$VAL"
                 shift
             else
@@ -203,7 +215,7 @@ echo "Contraseña requerida: $ASK_PASSWORD"
 echo "Archivo de salida $OUTFILE"
 echo "*****************************************************"
 
-if [[ "$VERBOSE" == "2" ]]; then
+if [[ "$VERBOSE" == "2" || "$VERBOSE" == "3" ]]; then
   BRIEF_FLAG=""
 fi
 
@@ -220,12 +232,19 @@ if [[ "$TLS_SCAN_ENABLED" == "1" ]]; then
       -starttls postgres -verify_return_error -tlsextdebug -status \
       -showcerts -$VERSION $BRIEF_FLAG 2>&1"
 
-    OUTPUT=$(eval "$CMD")
-    NEGOTIATED=$(echo "$OUTPUT" | grep "^Cipher" | awk '{print $2}')
+    OUTPUT_TLS_CONNECT=$(eval "$CMD")
+    NEGOTIATED=$(echo "$OUTPUT_TLS_CONNECT" | grep -v 'Cipher is (NONE)' | grep -E 'Ciphersuite:|Cipher is' | head -1 | awk -F':' '{print $NF}' | awk '{print $NF}' | tr -d '\r')
 
-    if [[ "$VERBOSE" == "1" ]]; then
+    
+    
+    if [[ "$VERBOSE" == "1" || "$VERBOSE" == "2" ]]; then
       echo -e "\n🧪 Detalles completos del escaneo:\n"
-      echo "$OUTPUT"
+      echo "$OUTPUT_TLS_CONNECT"
+    elif [[ "$VERBOSE" == "3" ]]; then
+      echo -e "\n    🧪 Detalles completos del escaneo de conexión TLS:\n"
+      echo "$OUTPUT_TLS_CONNECT"
+      echo -e "\n    🧪 Detalles completos del certificado TLS:\n"
+      echo "$OUTPUT_TLS_CONNECT"  | openssl x509 -noout -text
     fi
 
     if [[ -n "$NEGOTIATED" ]]; then
@@ -241,8 +260,8 @@ if [[ "$TLS_SCAN_ENABLED" == "1" ]]; then
         echo "   └─ Seguridad: ✔️ Versión TLS moderna ($VERSION)"
       fi
     else
-      echo -e "\n❌ Resultado:"
-      echo "   └─ Fallo en la conexión TLS [$VERSION]"
+        echo -e "\n❌ Resultado:"
+        echo "   └─ Fallo en la conexión TLS [$VERSION]"
     fi
   done
 fi
