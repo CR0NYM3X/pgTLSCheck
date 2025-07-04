@@ -210,35 +210,40 @@ fi
 
 ########### LÓGICA DEL PROGRAMA ############
 
+if [[ "$TLS_SCAN_ENABLED" == "1" ]]; then
+  for VERSION in "${TLS_VERSIONS[@]}"; do
+    echo -e "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🔍 Escaneando versión TLS: ${VERSION^^} en $HOST:$PORT"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-if [[  "$TLS_SCAN_ENABLED" == "1" ]]; then
-        for VERSION in "${TLS_VERSIONS[@]}"; do
-                CMD="echo | timeout $TIMEOUT openssl s_client -connect $HOST:$PORT -starttls postgres -verify_return_error  -tlsextdebug -status -showcerts -$VERSION $BRIEF_FLAG 2>&1"
-                OUTPUT=$(eval "$CMD")
+    CMD="echo | timeout $TIMEOUT openssl s_client -connect $HOST:$PORT \
+      -starttls postgres -verify_return_error -tlsextdebug -status \
+      -showcerts -$VERSION $BRIEF_FLAG 2>&1"
 
-                if [[ "$VERBOSE" == "1" ]]; then
-                        echo ""
-                        echo "******************* 🔍  Probando versión: $VERSION ****************************"
-                        echo "$OUTPUT"
-                        echo ""
-                else
-                        NEGOTIATED=$(echo "$OUTPUT" | grep "^Cipher" | awk '{print $2}')
-                        if [[ -n "$NEGOTIATED" ]]; then
+    OUTPUT=$(eval "$CMD")
+    NEGOTIATED=$(echo "$OUTPUT" | grep "^Cipher" | awk '{print $2}')
 
-                                if [[ "$VERSION" == "tls1" || "$VERSION" == "tls1_1" ]]; then
-                                        echo "⚠️ Alerta: Estás utilizando una versión TLS insegura ($VERSION)"
-                                        echo "🔍 Probando versión Insegura: $VERSION - Conexión: Exitosa -  Status: 🔥  - Cipher NEGOCIADO: $NEGOTIATED "
-                                else
-                                        echo "🔍 Probando versión Confiable: $VERSION - Conexión: Exitosa -  Status: ✅ - Cipher NEGOCIADO: $NEGOTIATED "
-                                fi
+    if [[ "$VERBOSE" == "1" ]]; then
+      echo -e "\n🧪 Detalles completos del escaneo:\n"
+      echo "$OUTPUT"
+    fi
 
-                        else
-                                echo "🔍 Probando versión: $VERSION - Conexión: Fallida"
-                        fi
-
-
-                fi
-
-        done
-
+    if [[ -n "$NEGOTIATED" ]]; then
+      if [[ "$VERSION" == "tls1" || "$VERSION" == "tls1_1" ]]; then
+        echo -e "\n⚠  Resultado:"
+        echo "   ├─ Estado de conexión: Exitosa"
+        echo "   ├─ Cipher negociado: $NEGOTIATED"
+        echo "   └─ Alerta de seguridad: 🔥 Versión TLS obsoleta ($VERSION)"
+      else
+        echo -e "\n✅ Resultado:"
+        echo "   ├─ Estado de conexión: Exitosa"
+        echo "   ├─ Cipher negociado: $NEGOTIATED"
+        echo "   └─ Seguridad: ✔️ Versión TLS moderna ($VERSION)"
+      fi
+    else
+      echo -e "\n❌ Resultado:"
+      echo "   └─ Fallo en la conexión TLS [$VERSION]"
+    fi
+  done
 fi
+
