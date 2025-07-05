@@ -217,7 +217,7 @@ if [[ "$DATE_CHECK" == "1" && "$VERBOSE" == "1"  ]]; then
 fi
 
 # Opcional: validar que no esté vacía
-if [[ -z "$password" ]]; then
+if [[ -z "$password" && $ASK_PASSWORD  ]]; then
   echo "⚠️ La contraseña no puede estar vacía."
   exit 1
 fi
