@@ -130,6 +130,8 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         -W|--password)
             ASK_PASSWORD=true
+            # Solicita la contraseña sin mostrarla en pantalla
+            read -s -p "Introduce tu contraseña: " password
             shift
             ;;
         -v|--verbose)
@@ -204,16 +206,21 @@ if [[ -z "$HOST" || -z "$PORT" ]]; then
     exit 1
 fi
 
-if [[ "$ASK_PASSWORD" == true && "$NO_PASSWORD" == true ]]; then
-    echo "❌ Error: No puedes usar --password y --no-password al mismo tiempo"
-    exit 1
-fi
+#if [[ "$ASK_PASSWORD" == true && "$NO_PASSWORD" == true ]]; then
+#    echo "❌ Error: No puedes usar --password y --no-password al mismo tiempo"
+#    exit 1
+#fi
 
 if [[ "$DATE_CHECK" == "1" && "$VERBOSE" == "1"  ]]; then
     echo "❌ Error: No se puede usar el --verbose=1 con --date-check"
     exit 1
 fi
 
+# Opcional: validar que no esté vacía
+if [[ -z "$password" ]]; then
+  echo "⚠️ La contraseña no puede estar vacía."
+  exit 1
+fi
 
 # Test: mostrar argumentos recibidos
 echo -e "\n${CYAN}${BOLD}═════════════════════════════════════════════════════════${RESET}"
