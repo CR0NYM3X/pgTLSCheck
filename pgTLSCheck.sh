@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Variables por defecto
-HOST="127.0.0.1"
+HOST='127.0.0.1'
 PORT=5432
-USERNAME="postgres"
-DBNAME="postgres"
-PGPASSWORD="NADA"
+USERNAME='postgres'
+DBNAME='postgres'
+PGPASSWORD='NADA'
 ASK_PASSWORD=false
 NO_PASSWORD=true
 VERBOSE=0
@@ -29,7 +29,11 @@ MAGENTA='\e[35m'     # Protocolos obsoletos
 CYAN='\e[36m'        # Encabezados visuales
 BOLD='\e[1m'         # Negritas
 RESET='\e[0m'        # Reset estilo
-
+# Binarios
+PSQL_BIN='/usr/pgsql-16/bin/psql'
+OPENSSL_BIN='/usr/bin/openssl'
+AWK_BIN='/usr/bin/awk'
+SED_BIN='/usr/bin/sed'
 
 show_help() {
     echo "pgTLSCheck.sh - Herramienta de escaneo TLS para PostgreSQL"
@@ -50,13 +54,13 @@ show_help() {
     echo "                                 3 = detallado (Imprime detalles completos del certificado)"
     echo "                                 4 = detallado (Imprime detalles de conexión TLS  y detalles completos del certificado)"
     echo "  --tls-scan                  Escanea versiones TLS soportadas"
-    echo "  --tls-cipher-audit          Verificar los tipos de ciphers soportadas"
+    echo "  --tls-supported-ciphers     Verificar todos los ciphers suportado y se puede conectar"
     echo "  --tls-connect-check         Verifica conexión segura a PostgreSQL usando psql"
     echo "  --date-check                validación de fechas del certificado"    
-    echo "  -f, --file=ARCHIVO          Ruta donde se guardara la salida impresa en la terminal"
+#    echo "  -f, --file=ARCHIVO          Ruta donde se guardara la salida impresa en la terminal"
 #    echo "  --text                      Imprimir salida en fromato text"
-    echo "  --json                      Imprimir salida en fromato json"
-    echo "  --csv                       Imprimir salida en fromato csv"
+#    echo "  --json                      Imprimir salida en fromato json"
+#    echo "  --csv                       Imprimir salida en fromato csv"
     echo "  --help                      Muestra esta ayuda"
     echo ""
     echo "Ejemplo:"
@@ -185,7 +189,7 @@ while [[ "$#" -gt 0 ]]; do
             TLS_SCAN_ENABLED=1
             shift
             ;;
-        --tls-cipher-audit)
+        --tls-supported-ciphers)
            TLS_CIPHER_AUDIT_ENABLED=1
            shift
            ;;
@@ -269,7 +273,7 @@ echo -e "${YELLOW}• Verificando conexión a PostgreSQL...${RESET}"
 
 # Ejecutar consulta timeout $TIMEOUT
 RESULT=$( PGPASSWORD="$PGPASSWORD" \
-  psql -q -X -U "$USERNAME" -h "$HOST" -p "$PORT" -d "$DBNAME" \
+  timeout $TIMEOUT $PSQL_BIN -q -X -U "$USERNAME" -h "$HOST" -p "$PORT" -d "$DBNAME" \
   -P format=aligned -P border=2 \
   -c "SELECT ssl, version, cipher FROM pg_stat_ssl WHERE pid = pg_backend_pid();" 2>&1)
 
@@ -344,10 +348,60 @@ check_cert_validity() {
 
 }
 
+ 
+# Funcion que valida los cipher soportados
+probar_ciphers_tls() {
+  local tls_input="$1"
+  local tls_label="${tls_input//_/.}"  # ej: tls1_2 → tls1.2
+
+  case "$tls_label" in
+    tls1)   TLS_FLAG="tls1" ;;
+    tls1.1) TLS_FLAG="tls1_1" ;;
+    tls1.2) TLS_FLAG="tls1_2" ;;
+    tls1.3) TLS_FLAG="tls1_3" ;;
+    *)
+      echo -e "${YELLOW}⚠ Versión TLS inválida: $tls_input${RESET}"
+      return
+      ;;
+  esac
+
+  echo -e "\n${BOLD}${MAGENTA}🔍 CIPHERS SOPORTADOS: $tls_label${RESET}"
+  printf "%-42s | %-12s\n" "Cipher" "Resultado"
+  printf "%-42s-+-%-12s\n" "$(printf '%.0s-' {1..42})" "$(printf '%.0s-' {1..12})"
+
+  local all_ciphers=$($OPENSSL_BIN ciphers -v 'ALL:eNULL' | awk '{print $1}')
+  local supported=0
+  local failed=0
+
+  for CIPHER in $all_ciphers; do
+    if [[ "$TLS_FLAG" == "tls1_3" ]]; then
+      CMD="echo | $OPENSSL_BIN s_client -connect $HOST:$PORT -starttls postgres -$TLS_FLAG -ciphersuites $CIPHER -verify_return_error -brief"
+    else
+      CMD="echo | $OPENSSL_BIN s_client -connect $HOST:$PORT -starttls postgres -$TLS_FLAG -cipher $CIPHER -verify_return_error -brief"
+    fi
+
+    RESULT=$(timeout "$TIMEOUT" bash -c "$CMD" 2>&1)
+
+    if echo "$RESULT" | grep -q "Cipher"; then
+      printf "%-42s | ${GREEN}%-12s${RESET}\n" "$CIPHER" "✔ Conectado"
+      ((supported++))
+    else
+      ((failed++))
+    fi
+  done
+
+  echo -e "\n${BOLD}📊 Resumen de Ciphers $tls_label:${RESET}"
+  echo -e "${GREEN}✔ Ciphers aceptados:${RESET} $supported"
+  echo -e "${RED}✘ Ciphers rechazados:${RESET} $failed"
+
+  if [[ $supported -eq 0 ]]; then
+    echo -e "\n${YELLOW}⚠ No se logró negociar ningún cipher con TLS $tls_label.${RESET}"
+  fi
+}
+
+
+
 # ********************************** FINAL DE FUNCIONES ***********************************************
-
-
-
 
 
 if [[ "$TLS_SCAN_ENABLED" == "1" ]]; then
@@ -356,15 +410,15 @@ if [[ "$TLS_SCAN_ENABLED" == "1" ]]; then
     echo -e "${CYAN}${BOLD}🔍 Escaneando TLS ${VERSION^^} en $HOST:$PORT${RESET}"
     echo -e "${CYAN}${BOLD}══════════════════════════════════════════════════════${RESET}"
 
-    CMD="echo | timeout $TIMEOUT openssl s_client -connect $HOST:$PORT \
+    CMD="echo | timeout $TIMEOUT $OPENSSL_BIN s_client -connect $HOST:$PORT \
       -starttls postgres -verify_return_error -tlsextdebug -status \
       -showcerts -$VERSION $BRIEF_FLAG 2>&1"
 
     OUTPUT_TLS_CONNECT=$(eval "$CMD")
-    OUTPUT_DETAILS_CERT=$(echo "$OUTPUT_TLS_CONNECT" | openssl x509 -noout -text 2>&1)
-    OUTPUT_DATES_CERT=$(echo "$OUTPUT_TLS_CONNECT"  | openssl x509 -noout -dates 2>&1)
+    OUTPUT_DETAILS_CERT=$(echo "$OUTPUT_TLS_CONNECT" | $OPENSSL_BIN x509 -noout -text 2>&1)
+    OUTPUT_DATES_CERT=$(echo "$OUTPUT_TLS_CONNECT"  | $OPENSSL_BIN x509 -noout -dates 2>&1)
     
-    NEGOTIATED=$(echo "$OUTPUT_TLS_CONNECT" | grep -v 'Cipher is (NONE)' | grep -E 'Ciphersuite:|Cipher is' | head -1 | awk -F':' '{print $NF}' | awk '{print $NF}' | tr -d '\r')
+    NEGOTIATED=$(echo "$OUTPUT_TLS_CONNECT" | grep -v 'Cipher is (NONE)' | grep -E 'Ciphersuite:|Cipher is' | head -1 | $AWK_BIN -F':' '{print $NF}' | $AWK_BIN '{print $NF}' | tr -d '\r')
 
     if [[ -n "$NEGOTIATED" ]]; then
       if [[ "$VERSION" == "tls1" || "$VERSION" == "tls1_1" ]]; then
@@ -373,26 +427,34 @@ if [[ "$TLS_SCAN_ENABLED" == "1" ]]; then
         echo -e "   ${YELLOW}• Cipher negociado: ${BOLD}$NEGOTIATED${RESET}"
         echo -e "   ${RED}• Riesgo alto: TLS obsoleto (${VERSION})${RESET}"
         if [[ "$VERBOSE" -ne "1" ]]; then 
-          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "subject:" | sed 's/^[ \t]*//' )${RESET}"
-          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "issuer:" | sed 's/^[ \t]*//' )${RESET}"
-          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "DNS:" | sed 's/^[ \t]*//' )${RESET}"
+          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "subject:" | $SED_BIN 's/^[ \t]*//' )${RESET}"
+          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "issuer:" | $SED_BIN 's/^[ \t]*//' )${RESET}"
+          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "DNS:" | $SED_BIN 's/^[ \t]*//' )${RESET}"
         fi        
         if [[ "$DATE_CHECK" == "1" ]]; then 
           check_cert_validity "$OUTPUT_DATES_CERT"
         fi
+        if [[ "$TLS_CIPHER_AUDIT_ENABLED" == "1" ]]; then 
+          probar_ciphers_tls $VERSION
+        fi
+        
+        
       else
         echo -e "\n${GREEN}${BOLD}✅ Resultado (moderno):${RESET}"
         echo -e "   ${GREEN}${BOLD}✔ Conexión exitosa${RESET}"
         echo -e "   ${GREEN}• Cipher negociado: ${BOLD}$NEGOTIATED${RESET}"
         echo -e "   ${GREEN}• Seguridad avanzada: TLS ${VERSION^^}${RESET}"
         if [[ "$VERBOSE" -ne "1" ]]; then 
-          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "subject:" | sed 's/^[ \t]*//' )${RESET}"
-          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "issuer:" | sed 's/^[ \t]*//' )${RESET}"
-          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "DNS:" | sed 's/^[ \t]*//' )${RESET}"
+          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "subject:" | $SED_BIN 's/^[ \t]*//' )${RESET}"
+          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "issuer:" | $SED_BIN 's/^[ \t]*//' )${RESET}"
+          echo -e "   ${YELLOW}• $(echo "$OUTPUT_DETAILS_CERT" | grep -Ei "DNS:" | $SED_BIN 's/^[ \t]*//' )${RESET}"
         fi        
         if [[ "$DATE_CHECK" == "1" ]]; then 
           check_cert_validity "$OUTPUT_DATES_CERT"
-        fi        
+        fi
+        if [[ "$TLS_CIPHER_AUDIT_ENABLED" == "1" ]]; then 
+          probar_ciphers_tls $VERSION
+        fi
       fi
     else
       echo -e "\n${RED}${BOLD}❌ Resultado:${RESET}"
@@ -416,6 +478,6 @@ if [[ "$TLS_SCAN_ENABLED" == "1" ]]; then
   done
 fi
 
-
+echo ""
 
 
