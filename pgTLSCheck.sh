@@ -459,6 +459,9 @@ if [[ "$TLS_SCAN_ENABLED" == "1" ]]; then
     else
       echo -e "\n${RED}${BOLD}❌ Resultado:${RESET}"
       echo -e "   ${RED}• No se pudo establecer conexión TLS (${VERSION})${RESET}"
+      if [[ "$TLS_CIPHER_AUDIT_ENABLED" == "1" ]]; then 
+        probar_ciphers_tls $VERSION
+      fi
     fi
 
     if [[ "$VERBOSE" == "1" || "$VERBOSE" == "2" ]]; then
