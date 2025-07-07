@@ -1,4 +1,5 @@
 #!/bin/bash
+# Nuevas actualizaciones , se agregara el guardado y en diferentes formatos y te permitira dar recomendaciones de que configuraciones colocar en postgresql.conf
 
 # Variables por defecto
 HOST='127.0.0.1'
