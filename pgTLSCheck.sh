@@ -51,9 +51,12 @@ show_help() {
     echo "                                 4 = detallado (Imprime detalles de conexión TLS  y detalles completos del certificado)"
     echo "  --tls-scan                  Escanea versiones TLS soportadas"
     echo "  --tls-cipher-audit          Verificar los tipos de ciphers soportadas"
-    echo "  --tls-connect-check         Verifica conexión segura a PostgreSQL"
+    echo "  --tls-connect-check         Verifica conexión segura a PostgreSQL usando psql"
     echo "  --date-check                validación de fechas del certificado"    
     echo "  -f, --file=ARCHIVO          Ruta donde se guardara la salida impresa en la terminal"
+#    echo "  --text                      Imprimir salida en fromato text"
+    echo "  --json                      Imprimir salida en fromato json"
+    echo "  --csv                       Imprimir salida en fromato csv"
     echo "  --help                      Muestra esta ayuda"
     echo ""
     echo "Ejemplo:"
@@ -253,10 +256,8 @@ echo -e "${YELLOW}• Contraseña requerida:   ${RESET}${BOLD}$ASK_PASSWORD${RES
 ##### VALIDANDO ALCANCE CON EL SERVIOD ANTES DE HACER EL TEST #####
 if timeout $TIMEOUT bash -c "echo > /dev/tcp/$HOST/$PORT" 2>/dev/null; then
     echo -e "${YELLOW}• Alcance al servidor:${RESET}${GREEN}${BOLD}    EXITOSO${RESET}"
-    echo -e "${CYAN}${BOLD}═════════════════════════════════════════════════════════${RESET}\n"
 else
     echo -e "${YELLOW}• Alcance al servidor:${RESET}${RED}${BOLD}    FALLIDO${RESET} - [TIMEOUT=$TIMEOUT]"
-    echo -e "${CYAN}${BOLD}═════════════════════════════════════════════════════════${RESET}\n"
     exit 1
 fi
 
@@ -268,30 +269,32 @@ echo -e "${YELLOW}• Verificando conexión a PostgreSQL...${RESET}"
 
 # Ejecutar consulta timeout $TIMEOUT
 RESULT=$( PGPASSWORD="$PGPASSWORD" \
-  psql -X -U "$USERNAME" -h "$HOST" -p "$PORT" -d "$DBNAME" \
+  psql -q -X -U "$USERNAME" -h "$HOST" -p "$PORT" -d "$DBNAME" \
   -P format=aligned -P border=2 \
   -c "SELECT ssl, version, cipher FROM pg_stat_ssl WHERE pid = pg_backend_pid();" 2>&1)
 
 # Verificar si falló la conexión
 if [[ $? -ne 0 ]]; then
-  echo -e "${RED}❌ Error de conexión:${RESET} ${BOLD}$RESULT${RESET}"
+  echo -e "${RED}   ❌ Error de conexión:${RESET} ${BOLD}$RESULT${RESET}"
   exit 1
 fi
 
 # Evaluar si la conexión es segura
 if echo "$RESULT" | grep -q "| t "; then
-  echo -e "${GREEN}🔐 Conexión SSL exitosa.${RESET}"
-  echo -e "${CYAN}• Detalles SSL:${RESET}"
+  echo -e "${GREEN}   🔐 Conexión SSL exitosa.${RESET}"
+  echo -e "${CYAN}    • Detalles SSL:${RESET}"
   echo "$RESULT"
 elif echo "$RESULT" | grep -q "| f "; then
-  echo -e "${RED}⚠️ Conexión sin SSL.${RESET}"
-  echo -e "${CYAN}• Detalles de la conexión:${RESET}"
+  echo -e "${RED}   ⚠️ Conexión sin SSL.${RESET}"
+  echo -e "${CYAN}   • Detalles de la conexión:${RESET}"
   echo "$RESULT"
 else
   echo -e "${YELLOW}❓ No se pudo interpretar la salida.${RESET}"
   echo "$RESULT"
 fi
-
+echo -e "${CYAN}${BOLD}═════════════════════════════════════════════════════════${RESET}\n"
+else
+echo -e "${CYAN}${BOLD}═════════════════════════════════════════════════════════${RESET}\n"
 fi
 
 
