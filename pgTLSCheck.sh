@@ -5,6 +5,7 @@ HOST="127.0.0.1"
 PORT=5432
 USERNAME="postgres"
 DBNAME="postgres"
+PGPASSWORD="NADA"
 ASK_PASSWORD=false
 NO_PASSWORD=true
 VERBOSE=0
@@ -131,9 +132,18 @@ while [[ "$#" -gt 0 ]]; do
         -W|--password)
             ASK_PASSWORD=true
             # Solicita la contraseña sin mostrarla en pantalla
-            read -s -p "Introduce tu contraseña: " password
+            read -s -p "Introduce tu contraseña: " PGPASSWORD
             shift
             ;;
+        -t|--timeout)            
+            if [[ -n "$2" && "$2" != -* ]]; then
+                TIMEOUT="$2"
+                shift 2
+            else
+                echo "❌ Error: Falta valor para el parámetro --timeout"
+                exit 1
+            fi
+            ;;         
         -v|--verbose)
             if [[ "$2" =~ ^[0-4]$ ]]; then
                 VERBOSE="$2"
@@ -217,10 +227,15 @@ if [[ "$DATE_CHECK" == "1" && "$VERBOSE" == "1"  ]]; then
 fi
 
 # Opcional: validar que no esté vacía
-if [[ -z "$password" && $ASK_PASSWORD  ]]; then
+if [[ -z "${PGPASSWORD// }" && "$ASK_PASSWORD" = "true"  ]]; then
   echo "⚠️ La contraseña no puede estar vacía."
   exit 1
 fi
+
+
+
+
+
 
 # Test: mostrar argumentos recibidos
 echo -e "\n${CYAN}${BOLD}═════════════════════════════════════════════════════════${RESET}"
@@ -234,9 +249,52 @@ echo -e "${YELLOW}• Usuario (DB):           ${RESET}${BOLD}$USERNAME${RESET}"
 echo -e "${YELLOW}• Base de datos:          ${RESET}${BOLD}$DBNAME${RESET}"
 echo -e "${YELLOW}• Contraseña requerida:   ${RESET}${BOLD}$ASK_PASSWORD${RESET}"
 # echo -e "${YELLOW}• Sin contraseña:         ${RESET}${BOLD}$NO_PASSWORD${RESET}"
-echo -e "${YELLOW}• Archivo de salida:      ${RESET}${BOLD}$OUTFILE${RESET}"
+#echo -e "${YELLOW}• Archivo de salida:      ${RESET}${BOLD}$OUTFILE${RESET}"
+##### VALIDANDO ALCANCE CON EL SERVIOD ANTES DE HACER EL TEST #####
+if timeout $TIMEOUT bash -c "echo > /dev/tcp/$HOST/$PORT" 2>/dev/null; then
+    echo -e "${YELLOW}• Alcance al servidor:${RESET}${GREEN}${BOLD}    EXITOSO${RESET}"
+    echo -e "${CYAN}${BOLD}═════════════════════════════════════════════════════════${RESET}\n"
+else
+    echo -e "${YELLOW}• Alcance al servidor:${RESET}${RED}${BOLD}    FALLIDO${RESET} - [TIMEOUT=$TIMEOUT]"
+    echo -e "${CYAN}${BOLD}═════════════════════════════════════════════════════════${RESET}\n"
+    exit 1
+fi
 
-echo -e "${CYAN}${BOLD}═════════════════════════════════════════════════════════${RESET}\n"
+
+
+if [[ "$TLS_CONNECT_CHECK_ENABLED" == "1"  ]]; then
+
+echo -e "${YELLOW}• Verificando conexión a PostgreSQL...${RESET}"
+
+# Ejecutar consulta timeout $TIMEOUT
+RESULT=$( PGPASSWORD="$PGPASSWORD" \
+  psql -X -U "$USERNAME" -h "$HOST" -p "$PORT" -d "$DBNAME" \
+  -P format=aligned -P border=2 \
+  -c "SELECT ssl, version, cipher FROM pg_stat_ssl WHERE pid = pg_backend_pid();" 2>&1)
+
+# Verificar si falló la conexión
+if [[ $? -ne 0 ]]; then
+  echo -e "${RED}❌ Error de conexión:${RESET} ${BOLD}$RESULT${RESET}"
+  exit 1
+fi
+
+# Evaluar si la conexión es segura
+if echo "$RESULT" | grep -q "| t "; then
+  echo -e "${GREEN}🔐 Conexión SSL exitosa.${RESET}"
+  echo -e "${CYAN}• Detalles SSL:${RESET}"
+  echo "$RESULT"
+elif echo "$RESULT" | grep -q "| f "; then
+  echo -e "${RED}⚠️ Conexión sin SSL.${RESET}"
+  echo -e "${CYAN}• Detalles de la conexión:${RESET}"
+  echo "$RESULT"
+else
+  echo -e "${YELLOW}❓ No se pudo interpretar la salida.${RESET}"
+  echo "$RESULT"
+fi
+
+fi
+
+
 
 
 if [[ "$VERBOSE" == "1"   ]]; then
