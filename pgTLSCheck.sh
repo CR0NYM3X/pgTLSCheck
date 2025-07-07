@@ -68,7 +68,7 @@ show_help() {
     echo "  --help                      Muestra esta ayuda"
     echo ""
     echo "Ejemplo:"
-    echo "  ./pgTLSCheck.sh --host=localhost --port=5432 --username=admin --dbname=postgres --password"
+    echo "  ./pgTLSCheck.sh -h 127.0.0.1 -p 5416 -U postgres -v 0 --tls-connect-check --tls-scan --date-check --tls-supported-ciphers"
 }
 
 ejecutar() {
