@@ -14,7 +14,7 @@ TLS_VERSIONS=("tls1" "tls1_1" "tls1_2" "tls1_3") # Lista de versiones TLS a test
 TIMEOUT=2
 TLS_SCAN_ENABLED=0
 DATE_CHECK=0
-TLS_CIPHER_AUDIT_ENABLED=0
+TLS_SUPPORTED_CIPHER_ENABLED=0
 TLS_CONNECT_CHECK_ENABLED=0
 BRIEF_FLAG="-brief"
 BINOPENSSL="/usr/bin"
@@ -34,6 +34,7 @@ PSQL_BIN='/usr/pgsql-16/bin/psql'
 OPENSSL_BIN='/usr/bin/openssl'
 AWK_BIN='/usr/bin/awk'
 SED_BIN='/usr/bin/sed'
+SORT_BIN='/usr/bin/sort'
 
 show_help() {
     echo "pgTLSCheck.sh - Herramienta de escaneo TLS para PostgreSQL"
@@ -53,10 +54,12 @@ show_help() {
     echo "                                 2 = detallado (Imprime detalles de conexión TLS )"
     echo "                                 3 = detallado (Imprime detalles completos del certificado)"
     echo "                                 4 = detallado (Imprime detalles de conexión TLS  y detalles completos del certificado)"
-    echo "  --tls-scan                  Escanea versiones TLS soportadas"
-    echo "  --tls-supported-ciphers     Verificar todos los ciphers suportado y se puede conectar"
-    echo "  --tls-connect-check         Verifica conexión segura a PostgreSQL usando psql"
-    echo "  --date-check                validación de fechas del certificado"    
+    echo "  --tls-scan                  Realiza un escaneo de versiones TLS soportadas por el servidor"
+    echo "  --tls-supported-ciphers     Enumera y valida los cipher suites aceptados por el servidor"
+    echo "                              (requiere que --tls-scan esté activado)"
+    echo "  --date-check                Verifica la validez y vigencia de los certificados TLS"
+    echo "                              (requiere que --tls-scan esté activado)"
+    echo "  --tls-connect-check         Verifica conexión TLS a PostgreSQL utilizando psql"
 #    echo "  -f, --file=ARCHIVO          Ruta donde se guardara la salida impresa en la terminal"
 #    echo "  --text                      Imprimir salida en fromato text"
 #    echo "  --json                      Imprimir salida en fromato json"
@@ -190,7 +193,7 @@ while [[ "$#" -gt 0 ]]; do
             shift
             ;;
         --tls-supported-ciphers)
-           TLS_CIPHER_AUDIT_ENABLED=1
+           TLS_SUPPORTED_CIPHER_ENABLED=1
            shift
            ;;
         --tls-connect-check)
@@ -217,7 +220,7 @@ while [[ "$#" -gt 0 ]]; do
     esac
 done
 
-# Validaciones obligatorias
+# ********************************** INICIO -  Validaciones obligatorias **********************************  
 if [[ -z "$HOST" || -z "$PORT" ]]; then
     echo "❌ Error: Debes especificar al menos --host y --port"
     exit 1
@@ -240,7 +243,18 @@ if [[ -z "${PGPASSWORD// }" && "$ASK_PASSWORD" = "true"  ]]; then
 fi
 
 
+if [[ "$DATE_CHECK" == "1" && "$TLS_SCAN_ENABLED" != "1" ]]; then
+  echo "❌ Error: la opción --date-check requiere que --tls-scan esté activado." >&2
+  exit 1
+fi
 
+if [[ "$TLS_SUPPORTED_CIPHER_ENABLED" == "1" && "$TLS_SCAN_ENABLED" != "1" ]]; then
+  echo "❌ Error: la opción --tls-supported-ciphers requiere que --tls-scan esté activado." >&2
+  exit 1
+fi
+
+
+#********************************** FINAL -  Validaciones obligatorias **********************************  
 
 
 
@@ -301,20 +315,16 @@ else
 echo -e "${CYAN}${BOLD}═════════════════════════════════════════════════════════${RESET}\n"
 fi
 
-
-
-
 if [[ "$VERBOSE" == "1"   ]]; then
   BRIEF_FLAG="-brief"
 fi
 
 
 
-########### LÓGICA DEL PROGRAMA ############
 
+# ********************************** INICIO - FUNCIONES ***********************************************
 
-# ********************************** INICIO DE FUNCIONES ***********************************************
-
+## Funcion que valida la fechas de un certificado 
 check_cert_validity() {
   local cert_output="$1"
 
@@ -348,6 +358,8 @@ check_cert_validity() {
 
 }
 
+
+
  
 # Funcion que valida los cipher soportados
 probar_ciphers_tls() {
@@ -369,7 +381,7 @@ probar_ciphers_tls() {
   printf "%-42s | %-12s\n" "Cipher" "Resultado"
   printf "%-42s-+-%-12s\n" "$(printf '%.0s-' {1..42})" "$(printf '%.0s-' {1..12})"
 
-  local all_ciphers=$($OPENSSL_BIN ciphers -v 'ALL:eNULL' | awk '{print $1}')
+  local all_ciphers=$($OPENSSL_BIN ciphers  -v  'ALL:eNULL'  | $AWK_BIN '{print $6 " " $2 " " $1}'  | $SED_BIN -e 's/Mac=//g' | $SORT_BIN | $AWK_BIN '{print $2 " " $3}' | $SORT_BIN | $AWK_BIN '{print $2}')
   local supported=0
   local failed=0
 
@@ -401,8 +413,13 @@ probar_ciphers_tls() {
 
 
 
-# ********************************** FINAL DE FUNCIONES ***********************************************
+# ********************************** FINAL - FUNCIONES ***********************************************
 
+
+
+
+
+# ********************************** INICIO - LOGICA DEL SCRIPT ***********************************************
 
 if [[ "$TLS_SCAN_ENABLED" == "1" ]]; then
   for VERSION in "${TLS_VERSIONS[@]}"; do
@@ -434,7 +451,7 @@ if [[ "$TLS_SCAN_ENABLED" == "1" ]]; then
         if [[ "$DATE_CHECK" == "1" ]]; then 
           check_cert_validity "$OUTPUT_DATES_CERT"
         fi
-        if [[ "$TLS_CIPHER_AUDIT_ENABLED" == "1" ]]; then 
+        if [[ "$TLS_SUPPORTED_CIPHER_ENABLED" == "1" ]]; then 
           probar_ciphers_tls $VERSION
         fi
         
@@ -452,14 +469,14 @@ if [[ "$TLS_SCAN_ENABLED" == "1" ]]; then
         if [[ "$DATE_CHECK" == "1" ]]; then 
           check_cert_validity "$OUTPUT_DATES_CERT"
         fi
-        if [[ "$TLS_CIPHER_AUDIT_ENABLED" == "1" ]]; then 
+        if [[ "$TLS_SUPPORTED_CIPHER_ENABLED" == "1" ]]; then 
           probar_ciphers_tls $VERSION
         fi
       fi
     else
       echo -e "\n${RED}${BOLD}❌ Resultado:${RESET}"
       echo -e "   ${RED}• No se pudo establecer conexión TLS (${VERSION})${RESET}"
-      if [[ "$TLS_CIPHER_AUDIT_ENABLED" == "1" ]]; then 
+      if [[ "$TLS_SUPPORTED_CIPHER_ENABLED" == "1" ]]; then 
         probar_ciphers_tls $VERSION
       fi
     fi
@@ -482,5 +499,7 @@ if [[ "$TLS_SCAN_ENABLED" == "1" ]]; then
 fi
 
 echo ""
+
+# ********************************** FINAL - LOGICA DEL SCRIPT ***********************************************
 
 
