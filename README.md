@@ -19,12 +19,6 @@ Conecta directamente al servidor PostgreSQL, valida la conexión TLS y consulta 
 
 ### 🔐 Funcionalidades 
 
-- **`--csv`**  
-  Genera automáticamente un **reporte consolidado en formato CSV** con los resultados por IP escaneada, ideal para auditorías, cumplimiento, y trazabilidad.
-
-- **`--file`**  
-  Permite guardar la salida en archivos de texto plano para análisis posterior o integración en sistemas de monitoreo.
-
 - **`--verbose`**  
   Modo resumido que simplifica los resultados, perfecto para automatización o ejecución dentro de scripts externos.
 
