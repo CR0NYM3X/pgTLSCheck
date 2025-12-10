@@ -12,7 +12,7 @@
 Valida qué versiones del protocolo TLS están habilitadas en el servidor, desde TLS 1.0 hasta TLS 1.3. Ideal para detectar configuraciones obsoletas o protocolos inseguros que deben ser desactivados.
 
 ### 2. 🔐 Auditoría de cipher suites (`--tls-supported-ciphers`)
-Prueba automaticamente las diferentes negociaciones de cipher suites vulnerables como RC4, MD5, DES, y EXPORT. Detecta ciphers aceptados que representan riesgos críticos, y ofrece claridad sobre qué algoritmos deben eliminarse de la configuración.
+Prueba automaticamente las diferentes negociaciones de cipher suites . Detecta ciphers aceptados que representan riesgos críticos, y ofrece claridad sobre qué algoritmos deben eliminarse de la configuración y te entrega un reporte.
 
 ### 3. 🌐 Verificación de conexión segura al motor PostgreSQL (`--tls-connect-check`)
 Conecta directamente al servidor PostgreSQL, valida la conexión TLS y consulta la vista `pg_stat_ssl` para comprobar si el canal está cifrado correctamente. Recomendado para entornos que exigen cumplimiento en cifrado de datos en tránsito (ej. PCI-DSS, ISO 27001, GDPR).
@@ -23,15 +23,7 @@ Conecta directamente al servidor PostgreSQL, valida la conexión TLS y consulta 
   Modo resumido que simplifica los resultados, perfecto para automatización o ejecución dentro de scripts externos.
 
 
-
----
-
-## ⚙️ **Características adicionales**
-
-- Modo resumen (`--verbose`) para salidas limpias y automáticas
-- Exportación de resultados (`--file`) para generar reportes trazables
-- Parámetros flexibles y combinables que permiten escaneos rápidos o completos
-
+ 
 ---
 
 ## 🚀 ¿Por qué usar pgTLSCheck.sh?
