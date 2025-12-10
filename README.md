@@ -31,7 +31,6 @@ Conecta directamente al servidor PostgreSQL, valida la conexión TLS y consulta 
 - Modo resumen (`--verbose`) para salidas limpias y automáticas
 - Exportación de resultados (`--file`) para generar reportes trazables
 - Parámetros flexibles y combinables que permiten escaneos rápidos o completos
-- Preparado para integrarse en pipelines de CI/CD o rutinas de monitoreo
 
 ---
 
