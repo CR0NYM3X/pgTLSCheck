@@ -1,14 +1,17 @@
 #!/bin/bash
 # Nuevas actualizaciones , se agregara el guardado y en diferentes formatos y te permitira dar recomendaciones de que configuraciones colocar en postgresql.conf
 
-# Variables por defecto
+## Variables para conextarse a postgres
 HOST='127.0.0.1'
 PORT=5432
 USERNAME='postgres'
 DBNAME='postgres'
 PGPASSWORD='NADA'
+
+
+# Variables por defecto
+# NO_PASSWORD=true
 ASK_PASSWORD=false
-NO_PASSWORD=true
 VERBOSE=0
 OUTFILE="/tmp/sslout.txt"
 TLS_VERSIONS=("tls1" "tls1_1" "tls1_2" "tls1_3") # Lista de versiones TLS a testear
@@ -136,10 +139,10 @@ while [[ "$#" -gt 0 ]]; do
             DBNAME="${1#*=}"
             shift
             ;;
-        -w|--no-password)
-            NO_PASSWORD=true
-            shift
-            ;;
+        #-w|--no-password)
+        #    NO_PASSWORD=true
+        #    shift
+        #   ;;
         -W|--password)
             ASK_PASSWORD=true
             # Solicita la contraseña sin mostrarla en pantalla
