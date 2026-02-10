@@ -1,16 +1,13 @@
 #!/bin/bash
 # Nuevas actualizaciones , se agregara el guardado y en diferentes formatos y te permitira dar recomendaciones de que configuraciones colocar en postgresql.conf
 
-## Variables para conextarse a postgres
+# Variables por defecto
 HOST='127.0.0.1'
 PORT=5432
 USERNAME='postgres'
 DBNAME='postgres'
 PGPASSWORD='NADA'
-
-
-# Variables por defecto
-# NO_PASSWORD=true
+#NO_PASSWORD=true
 ASK_PASSWORD=false
 VERBOSE=0
 OUTFILE="/tmp/sslout.txt"
